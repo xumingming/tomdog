@@ -160,7 +160,7 @@
                       :root "."}
                      (for [pair params]
                        (case (first pair)
-                         "-p" [:port (int (second pair))]
+                         "-p" [:port (Integer/parseInt (second pair))]
                          "-d" [:root (second pair)])))]
     (println "params: " params)
     (server (:port params) (:root params))))
