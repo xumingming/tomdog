@@ -2,7 +2,7 @@
   (:require [clojure.string :as str :refer [trim join]]
             [clojure.pprint :as pprint])
   (:import [java.net ServerSocket Socket]
-           [java.io InputStream OutputStream File]))
+           [java.io FileInputStream InputStream OutputStream File]))
 
 (set! *warn-on-reflection* true)
 
@@ -75,6 +75,19 @@
       "css" "text/css"
       "text/plain")))
 
+(defn determine-response-code [real-file]
+  (if (not (.exists real-file))
+    {:code 404
+     :code-text "Not Found"
+     :content-type (determine-content-type (.getPath real-file))}
+    (if (.isFile real-file)
+      {:code 200
+       :code-text "OK"
+       :content-type (determine-content-type (.getPath real-file))}
+      {:code 200
+       :code-text "OK"
+       :content-type "text/html"})))
+
 (defn read-file-content 
   "read the file from /tmp directory"
   [dir path]
@@ -109,6 +122,15 @@
            :content-type "text/html"
            :content ret})))))
 
+(defn read-file-content-as-bytes 
+  "read file content as bytes array"
+  [real-file]
+  (let [fstream (FileInputStream. real-file)
+        file-length (.length real-file)
+        ret (byte-array file-length)]
+    (.read fstream ret)
+    ret))
+
 (defn write-bytes 
   "write the input string as bytes into output stream"
   [^OutputStream ostream ^String str1]
@@ -117,9 +139,8 @@
 
 (defn write-response 
   "write response into the output stream"
-  [^OutputStream ostream response]
-  (let [response-bytes (.getBytes (:content response))
-        cnt (count response-bytes)]
+  [^OutputStream ostream response response-bytes]
+  (let [cnt (count response-bytes)]
     (write-bytes ostream (str "HTTP/1.1 " (:code response) " " (:code-text response) "\r\n"))
     (write-bytes ostream "Date: Wed, 28 Aug 2013 07:36:30 GMT\r\n")
     (write-bytes ostream "Server: Tomdog\r\n")
@@ -137,11 +158,14 @@
         ^OutputStream ostream (.getOutputStream socket)
         request-body (read-request-body istream)
         request (decode-request request-body)
-        response (read-file-content root-path (:url request))]
+        real-path (str root-path (:url request))
+        ^File real-file (File. real-path)
+        response-code (determine-response-code real-file)
+        response-bytes (read-file-content-as-bytes real-file)]
     (println "request is: ")
     (pprint/pprint request)
     (println)
-    (write-response ostream response)
+    (write-response ostream response-code response-bytes)
     (.close ostream)
     (.close istream)))
 
