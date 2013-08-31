@@ -88,39 +88,25 @@
        :code-text "OK"
        :content-type "text/html"})))
 
-(defn read-file-content 
-  "read the file from /tmp directory"
-  [dir path]
-  (let [real-path (str dir path)
-        ^File real-file (File. real-path)]
-    (if (not (.exists real-file))
-      {:code 404
-       :code-text "Not Found"
-       :content-type (determine-content-type path)
-       :content "404 Not Found"}
-      (if (.isFile real-file)
-        {:code 200
-         :code-text "OK"
-         :content-type (determine-content-type path)
-         :content (slurp real-path)}
-        (let [sub-files (.listFiles real-file)
-              parent-file (.getParentFile real-file)
-              parent-path (.getPath parent-file)
-              parent-path (if (< (- (count parent-path) (count dir)) 2)
-                            "/"
-                            (subs parent-path (count dir) (count parent-path)))
-              ret [(str "<ul><li><a href='" parent-path "'>..</a></li>")]
-              ret (into ret (for [^File f sub-files
-                                  :let [fpath (.getPath f)
-                                        fpath-desc (.getName f)
-                                        fpath (subs fpath (count dir) (count fpath))]]
-                              (str "<li><a href='" fpath "'>" fpath-desc "</a></li>")))
-              ret (conj ret "</ul>")
-              ret (join "" ret)]
-          {:code 200
-           :code-text "OK"
-           :content-type "text/html"
-           :content ret})))))
+(defn read-directory-as-html-bytes 
+  "read directory content as html bytes array"
+  [real-file root-path]
+  (let [sub-files (.listFiles real-file)
+        parent-file (.getParentFile real-file)
+        parent-path (.getPath parent-file)
+        parent-path (if (< (- (count parent-path) (count root-path)) 2)
+                      "/"
+                      (subs parent-path (count root-path) (count parent-path)))
+        ret [(str "<ul><li><a href='" parent-path "'>..</a></li>")]
+        ret (into ret (for [^File f sub-files
+                            :let [fpath (.getPath f)
+                                  fpath-desc (.getName f)
+                                  fpath (subs fpath (count root-path) (count fpath))]]
+                        (str "<li><a href='" fpath "'>" fpath-desc "</a></li>")))
+        ret (conj ret "</ul>")
+        ret (join "" ret)
+        ret (.getBytes ret)]
+    ret))
 
 (defn read-file-content-as-bytes 
   "read file content as bytes array"
@@ -131,11 +117,20 @@
     (.read fstream ret)
     ret))
 
+(defn read-file-content 
+  "read the file from /tmp directory"
+  [real-file root-path]
+  (let []
+    (if (not (.exists real-file))
+      (.getBytes "404 Not Found")
+      (if (.isFile real-file)
+        (read-file-content-as-bytes real-file)
+        (read-directory-as-html-bytes real-file root-path)))))
+
 (defn write-bytes 
   "write the input string as bytes into output stream"
   [^OutputStream ostream ^String str1]
   (.write ostream (.getBytes str1)))
-
 
 (defn write-response 
   "write response into the output stream"
@@ -161,7 +156,7 @@
         real-path (str root-path (:url request))
         ^File real-file (File. real-path)
         response-code (determine-response-code real-file)
-        response-bytes (read-file-content-as-bytes real-file)]
+        response-bytes (read-file-content real-file root-path)]
     (println "request is: ")
     (pprint/pprint request)
     (println)
